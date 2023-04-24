@@ -10,7 +10,8 @@ class AccountAsset(models.Model):
 
     number = fields.Char(
         string="Asset Number",
-        default="",
+        default=lambda self: self.env['ir.sequence'].next_by_code('account.asset'),
+        readonly=True,
         index=True,
         copy=False,
     )
