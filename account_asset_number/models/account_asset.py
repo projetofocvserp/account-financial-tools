@@ -7,21 +7,23 @@ from odoo import api, fields, models
 class AccountAsset(models.Model):
     _inherit = "account.asset"
     _rec_name = "number"
-
+    
+    # Especificação funcional mudanças Focvs
     number = fields.Char(
         string="Asset Number",
-        readonly=True,
         required=True,
         index=True,
         copy=False,
     )
-    active_key = fields.Char(
-        string="Active Key",
-        default=lambda self: self.env['ir.sequence'].next_by_code('account.asset'),
-        readonly=True,
-        index=True,
-        copy=False,
-    )
+    sequence = fields.Integer(string="Asset Key")
+    # Especificação funcional mudanças Focvs
+
+    # active_key = fields.Char(
+    #     string="Active Key",
+    #     default=lambda self: self.env['ir.sequence'].next_by_code('account.asset'),
+    #     readonly=True,
+    #     copy=False,
+    # )
 
     use_sequence = fields.Boolean(related="profile_id.use_sequence")
 
