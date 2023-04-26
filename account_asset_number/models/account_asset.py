@@ -1,7 +1,7 @@
 # Copyright 2021 Ecosoft Co., Ltd. (http://ecosoft.co.th)
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
-from odoo import api, fields, models
+from odoo import api, fields, models, _
 
 
 class AccountAsset(models.Model):
@@ -15,15 +15,13 @@ class AccountAsset(models.Model):
         index=True,
         copy=False,
     )
-    sequence = fields.Integer(string="Asset Key")
-    # Especificação funcional mudanças Focvs
+    sequence = fields.Char(default=lambda x: _('New'), readonly=True, copy=False)
 
-    # active_key = fields.Char(
-    #     string="Active Key",
-    #     default=lambda self: self.env['ir.sequence'].next_by_code('account.asset'),
-    #     readonly=True,
-    #     copy=False,
-    # )
+    @api.model
+    def create(self, vals):
+        vals["sequence"] = self.env["ir.sequence"].next_by_code("account_asset_sequence")
+        return super().create(vals)
+    # Especificação funcional mudanças Focvs
 
     use_sequence = fields.Boolean(related="profile_id.use_sequence")
 

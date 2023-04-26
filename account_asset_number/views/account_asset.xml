@@ -19,6 +19,8 @@
                     />
                 </h2>
             </h1>
+            
+    <!-- Especificação funcional mudanças Focvs -->
             <xpath expr="//div[@class='oe_title'][1]" position="before">
                 <b>
                     <field name="sequence"/>
@@ -26,13 +28,18 @@
             </xpath>
         </field>
     </record>
-    <record id="seq_account_asset" model="ir.sequence">
-        <field name="name">Account Asset</field>
-        <field name="code">account.asset</field>
-        <field name="prefix"></field>
-        <field name="padding">4</field>
-        <field name="company_id" eval="False" />
-    </record>
+    <data>  
+        <record id="seq_account_asset" model="ir.sequence">
+            <field name="name">Account Asset</field>
+            <field name="code">account_asset_sequence</field>
+            <field name="prefix"></field>
+            <field name="number_next">1</field>
+            <field name="padding">4</field>
+        </record>
+    </data>
+    
+    <!-- Especificação funcional mudanças Focvs -->
+
     <record model="ir.ui.view" id="account_asset_view_tree">
         <field name="name">account.asset.tree</field>
         <field name="model">account.asset</field>
