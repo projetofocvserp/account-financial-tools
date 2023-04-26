@@ -2,26 +2,27 @@
 # License AGPL-3.0 or later (https://www.gnu.org/licenses/agpl).
 
 from odoo import api, fields, models, _
-
+from typing import Dict, Any
 
 class AccountAsset(models.Model):
     _inherit = "account.asset"
     _rec_name = "number"
     
-    # Especificação funcional mudanças Focvs
+    # Especificação funcional mudanças FOCVS
     number = fields.Char(
         string="Asset Number",
         required=True,
         index=True,
         copy=False,
     )
-    sequence = fields.Char(default=lambda x: _('New'), readonly=True, copy=False)
+    sequence = fields.Char(default="", readonly=True, copy=False)
+
 
     @api.model
-    def create(self, vals):
+    def create(self, vals: Dict[str, Any]):
         vals["sequence"] = self.env["ir.sequence"].next_by_code("account_asset_sequence")
         return super().create(vals)
-    # Especificação funcional mudanças Focvs
+    # Especificação funcional mudanças FOCVS
 
     use_sequence = fields.Boolean(related="profile_id.use_sequence")
 
