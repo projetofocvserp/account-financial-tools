@@ -37,14 +37,24 @@ class AccountAsset(models.Model):
     _order = "date_start desc, code, name"
     _check_company_auto = True
 
-    account_move_line_ids = fields.One2many(
+    # account_move_line_ids = fields.One2many(
+    #     comodel_name="account.move.line",
+    #     inverse_name="asset_id",
+    #     string="Entries",
+    #     readonly=True,
+    #     copy=False,
+    #     check_company=True,
+    # )
+
+    account_move_line_id = fields.Many2one(
         comodel_name="account.move.line",
-        inverse_name="asset_id",
-        string="Entries",
+        string='Entry',
         readonly=True,
         copy=False,
         check_company=True,
+        ondelete='cascade'
     )
+
     move_line_check = fields.Boolean(
         compute="_compute_move_line_check", string="Has accounting entries"
     )
@@ -150,7 +160,8 @@ class AccountAsset(models.Model):
         states=READONLY_STATES,
     )
     method = fields.Selection(
-        selection=lambda self: self.env["account.asset.profile"]._selection_method(),
+        selection=lambda self: self.env["account.asset.profile"]._selection_method(
+        ),
         string="Computation Method",
         compute="_compute_method",
         readonly=False,
@@ -330,7 +341,8 @@ class AccountAsset(models.Model):
             value_depreciated = sum([line.amount for line in lines])
             residual = asset.depreciation_base - value_depreciated
             depreciated = value_depreciated
-            asset.update({"value_residual": residual, "value_depreciated": depreciated})
+            asset.update({"value_residual": residual,
+                         "value_depreciated": depreciated})
 
     @api.depends("profile_id")
     def _compute_group_ids(self):
@@ -500,9 +512,9 @@ class AccountAsset(models.Model):
                 )
         # update accounting entries linked to lines of type 'create'
         amls = self.with_context(allow_asset_removal=True).mapped(
-            "account_move_line_ids"
+            "account_move_line_id"
         )
-        amls.write({"asset_id": False})
+        amls.write({"asset_ids": False})
         return super().unlink()
 
     @api.model
@@ -510,7 +522,8 @@ class AccountAsset(models.Model):
         args = args or []
         domain = []
         if name:
-            domain = ["|", ("code", "=ilike", name + "%"), ("name", operator, name)]
+            domain = ["|", ("code", "=ilike", name + "%"),
+                      ("name", operator, name)]
             if operator in expression.NEGATIVE_TERM_OPERATORS:
                 domain = ["&", "!"] + domain[1:]
         assets = self.search(domain + args, limit=limit)
@@ -575,7 +588,7 @@ class AccountAsset(models.Model):
             "view_id": False,
             "type": "ir.actions.act_window",
             "context": context,
-            "domain": [("id", "in", self.account_move_line_ids.mapped("move_id").ids)],
+            "domain": [("id", "in", self.account_move_line_id.mapped("move_id").ids)],
         }
 
     def _group_lines(self, table):
@@ -696,8 +709,10 @@ class AccountAsset(models.Model):
             # recompute in case of deviation
             depreciated_value_posted = depreciated_value = 0.0
             if posted_lines:
-                total_table_lines = sum([len(entry["lines"]) for entry in table])
-                move_check_lines = asset.depreciation_line_ids.filtered("move_check")
+                total_table_lines = sum([len(entry["lines"])
+                                        for entry in table])
+                move_check_lines = asset.depreciation_line_ids.filtered(
+                    "move_check")
                 last_depreciation_date = last_line.line_date
                 last_date_in_table = table[-1]["lines"][-1]["date"]
                 # If the number of lines in the table is the same as the depreciation
@@ -744,7 +759,8 @@ class AccountAsset(models.Model):
                     [posted_line.amount for posted_line in posted_lines]
                 )
                 residual_amount = asset.depreciation_base - depreciated_value
-                amount_diff = round(residual_amount_table - residual_amount, digits)
+                amount_diff = round(residual_amount_table
+                                    - residual_amount, digits)
                 if amount_diff:
                     # We will auto-create a new line because the number of lines in
                     # the tables are the same as the posted depreciations and there
@@ -827,7 +843,8 @@ class AccountAsset(models.Model):
             if firstyear:
                 depreciation_date_start = self.date_start
                 fy_date_stop = entry["date_stop"]
-                first_fy_asset_days = (fy_date_stop - depreciation_date_start).days + 1
+                first_fy_asset_days = (
+                    fy_date_stop - depreciation_date_start).days + 1
                 first_fy_duration = self._get_fy_duration(fy, option="days")
                 first_fy_year_factor = self._get_fy_duration(fy, option="years")
                 duration_factor = (
@@ -864,7 +881,8 @@ class AccountAsset(models.Model):
                     months=self.method_number, days=-1
                 )
             elif self.method_period == "quarter":
-                m = [x for x in [3, 6, 9, 12] if x >= depreciation_start_date.month][0]
+                m = [x for x in [3, 6, 9, 12] if x
+                     >= depreciation_start_date.month][0]
                 first_line_date = depreciation_start_date + relativedelta(
                     month=m, day=31
                 )
@@ -946,7 +964,8 @@ class AccountAsset(models.Model):
             else:
                 return year_amount_degressive
         else:
-            raise UserError(_("Illegal value %s in asset.method.") % self.method)
+            raise UserError(
+                _("Illegal value %s in asset.method.") % self.method)
 
     def _compute_line_dates(self, table, start_date, stop_date):
         """
@@ -1148,7 +1167,8 @@ class AccountAsset(models.Model):
 
         for entry in table:
             if not entry["fy_amount"]:
-                entry["fy_amount"] = sum([line["amount"] for line in entry["lines"]])
+                entry["fy_amount"] = sum([line["amount"]
+                                         for line in entry["lines"]])
 
     def _get_fy_info(self, date):
         """Return an homogeneus data structure for fiscal years."""
@@ -1240,7 +1260,8 @@ class AccountAsset(models.Model):
                 tb = "".join(format_exception(*exc_info()))
                 asset_ref = depreciation.asset_id.name
                 if depreciation.asset_id.code:
-                    asset_ref = "[{}] {}".format(depreciation.asset_id.code, asset_ref)
+                    asset_ref = "[{}] {}".format(
+                        depreciation.asset_id.code, asset_ref)
                 error_log += _("\nError while processing asset '%s': %s") % (
                     asset_ref,
                     str(e),
@@ -1253,7 +1274,8 @@ class AccountAsset(models.Model):
 
         if check_triggers and recomputes:
             companies = recomputes.mapped("company_id")
-            triggers = recomputes.filtered(lambda r: r.company_id.id in companies.ids)
+            triggers = recomputes.filtered(
+                lambda r: r.company_id.id in companies.ids)
             if triggers:
                 recompute_vals = {
                     "date_completed": fields.Datetime.now(),

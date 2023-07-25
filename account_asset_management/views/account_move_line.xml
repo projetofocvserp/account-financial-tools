@@ -10,7 +10,7 @@
                     name="asset_profile_id"
                     domain="[('company_id','=', parent.company_id)]"
                 />
-                <field name="asset_id" />
+                <field name="asset_ids" />
             </field>
         </field>
     </record>
@@ -20,7 +20,7 @@
         <field name="inherit_id" ref="account.view_account_move_line_filter" />
         <field name="arch" type="xml">
             <field name="account_id" position="after">
-                <field name="asset_id" />
+                <field name="asset_ids" />
             </field>
         </field>
     </record>

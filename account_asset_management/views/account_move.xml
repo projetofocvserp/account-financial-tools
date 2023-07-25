@@ -32,7 +32,7 @@
                     optional="show"
                 />
                 <field
-                    name="asset_id"
+                    name="asset_ids"
                     attrs="{'column_invisible': [('parent.move_type', 'not in', ('out_invoice', 'out_refund'))]}"
                     groups="account.group_account_manager"
                     optional="show"
@@ -48,7 +48,7 @@
                     optional="hide"
                 />
                 <field
-                    name="asset_id"
+                    name="asset_ids"
                     groups="account.group_account_manager"
                     optional="show"
                 />

@@ -23,7 +23,7 @@ FIELDS_AFFECTS_ASSET_MOVE_LINE = {
     "journal_id",
     "date",
     "asset_profile_id",
-    "asset_id",
+    "asset_ids",
 }
 
 
@@ -74,13 +74,13 @@ class AccountMove(models.Model):
                 )
         return super().write(vals)
 
-    def _prepare_asset_vals(self, aml):
+    def _prepare_asset_vals(self, aml, quantity=1.0):
         depreciation_base = aml.balance
         return {
-            "name": aml.name,
+            "name": "{} ({})".format(aml.name, quantity),
             "code": self.name,
             "profile_id": aml.asset_profile_id,
-            "purchase_value": depreciation_base,
+            "purchase_value": depreciation_base / quantity,
             "partner_id": aml.partner_id,
             "date_start": self.date,
             "account_analytic_id": aml.analytic_account_id,
@@ -92,40 +92,63 @@ class AccountMove(models.Model):
             for aml in move.line_ids.filtered(
                 lambda line: line.asset_profile_id and not line.tax_line_id
             ):
-                vals = move._prepare_asset_vals(aml)
-                if not aml.name:
-                    raise UserError(
-                        _("Asset name must be set in the label of the line.")
+                if aml.quantity > 1.0:
+                    for i in range(int(aml.quantity)):
+                        vals = move._prepare_asset_vals(
+                            aml, quantity=aml.quantity)
+                        if not aml.name:
+                            raise UserError(
+                                _("Asset name must be set in the label of the line.")
+                            )
+
+                        asset_form = Form(
+                            self.env["account.asset"]
+                            .with_company(move.company_id)
+                            .with_context(
+                                create_asset_from_move_line=True, move_id=move.id
+                            )
+                        )
+                        for key, val in vals.items():
+                            setattr(asset_form, key, val)
+                        asset = asset_form.save()
+                        asset.analytic_tag_ids = aml.analytic_tag_ids
+                        aml.with_context(
+                            allow_asset=True, allow_asset_removal=True
+                        ).asset_ids = [(4, asset.id, 0)]
+                else:
+                    vals = move._prepare_asset_vals(aml)
+                    if not aml.name:
+                        raise UserError(
+                            _("Asset name must be set in the label of the line.")
+                        )
+
+                    asset_form = Form(
+                        self.env["account.asset"]
+                        .with_company(move.company_id)
+                        .with_context(create_asset_from_move_line=True, move_id=move.id)
                     )
-                if aml.asset_id:
-                    continue
-                asset_form = Form(
-                    self.env["account.asset"]
-                    .with_company(move.company_id)
-                    .with_context(create_asset_from_move_line=True, move_id=move.id)
-                )
-                for key, val in vals.items():
-                    setattr(asset_form, key, val)
-                asset = asset_form.save()
-                asset.analytic_tag_ids = aml.analytic_tag_ids
-                aml.with_context(
-                    allow_asset=True, allow_asset_removal=True
-                ).asset_id = asset.id
+                    for key, val in vals.items():
+                        setattr(asset_form, key, val)
+                    asset = asset_form.save()
+                    asset.analytic_tag_ids = aml.analytic_tag_ids
+                    aml.with_context(
+                        allow_asset=True, allow_asset_removal=True
+                    ).asset_ids = [(4, asset.id, 0)]
+
             refs = [
                 "<a href=# data-oe-model=account.asset data-oe-id=%s>%s</a>"
                 % tuple(name_get)
-                for name_get in move.line_ids.filtered(
-                    "asset_profile_id"
-                ).asset_id.name_get()
+                for name_get in move.line_ids.filtered("asset_profile_id").asset_ids.name_get()
             ]
             if refs:
-                message = _("This invoice created the asset(s): %s") % ", ".join(refs)
+                message = _(
+                    "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
     def button_draft(self):
         invoices = self.filtered(lambda r: r.is_purchase_document())
         if invoices:
-            invoices.line_ids.asset_id.unlink()
+            invoices.line_ids.asset_ids.unlink()
         super().button_draft()
 
     def _reverse_move_vals(self, default_values, cancel=True):
@@ -133,16 +156,18 @@ class AccountMove(models.Model):
         if move_vals["move_type"] not in ("out_invoice", "out_refund"):
             for line_command in move_vals.get("line_ids", []):
                 line_vals = line_command[2]  # (0, 0, {...})
-                asset = self.env["account.asset"].browse(line_vals["asset_id"])
+                assets = self.env["account.asset"].browse(
+                    line_vals["asset_ids"])
                 # We remove the asset if we recognize that we are reversing
                 # the asset creation
-                if asset:
+                if assets:
                     asset_line = self.env["account.asset.line"].search(
-                        [("asset_id", "=", asset.id), ("type", "=", "create")], limit=1
+                        [("asset_id", "in", assets.ids), ("type", "=", "create")], limit=1
                     )
                     if asset_line and asset_line.move_id == self:
-                        asset.unlink()
-                        line_vals.update(asset_profile_id=False, asset_id=False)
+                        assets.unlink()
+                        line_vals.update(
+                            asset_profile_id=False, asset_ids=False)
         return move_vals
 
     def action_view_assets(self):
@@ -176,19 +201,19 @@ class AccountMoveLine(models.Model):
         store=True,
         readonly=False,
     )
-    asset_id = fields.Many2one(
+    asset_ids = fields.One2many(
         comodel_name="account.asset",
-        string="Asset",
-        ondelete="restrict",
+        inverse_name="account_move_line_id",
+        string="Assets",
     )
 
-    @api.depends("account_id", "asset_id")
+    @api.depends("account_id", "asset_ids")
     def _compute_asset_profile(self):
         for rec in self:
-            if rec.account_id.asset_profile_id and not rec.asset_id:
+            if rec.account_id.asset_profile_id and not rec.asset_ids:
                 rec.asset_profile_id = rec.account_id.asset_profile_id
-            elif rec.asset_id:
-                rec.asset_profile_id = rec.asset_id.profile_id
+            elif rec.asset_ids:
+                rec.asset_profile_id = rec.asset_ids[0].profile_id
 
     @api.onchange("asset_profile_id")
     def _onchange_asset_profile_id(self):
@@ -200,7 +225,7 @@ class AccountMoveLine(models.Model):
         for vals in vals_list:
             move = self.env["account.move"].browse(vals.get("move_id"))
             if not move.is_sale_document():
-                if vals.get("asset_id") and not self.env.context.get("allow_asset"):
+                if vals.get("asset_ids") and not self.env.context.get("allow_asset"):
                     raise UserError(
                         _(
                             "You are not allowed to link "
@@ -216,12 +241,12 @@ class AccountMoveLine(models.Model):
     def write(self, vals):
         if set(vals).intersection(FIELDS_AFFECTS_ASSET_MOVE_LINE) and not (
             self.env.context.get("allow_asset_removal")
-            and list(vals.keys()) == ["asset_id"]
+            and list(vals.keys()) == ["asset_ids"]
         ):
             # Check if at least one asset is linked to a move
             linked_asset = False
             for move_line in self.filtered(lambda r: not r.move_id.is_sale_document()):
-                linked_asset = move_line.asset_id
+                linked_asset = move_line.asset_ids
                 if linked_asset:
                     raise UserError(
                         _(
@@ -232,7 +257,7 @@ class AccountMoveLine(models.Model):
 
         if (
             self.filtered(lambda r: not r.move_id.is_sale_document())
-            and vals.get("asset_id")
+            and vals.get("asset_ids")
             and not self.env.context.get("allow_asset")
         ):
             raise UserError(
