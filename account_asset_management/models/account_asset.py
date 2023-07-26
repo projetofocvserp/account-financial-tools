@@ -514,7 +514,7 @@ class AccountAsset(models.Model):
         amls = self.with_context(allow_asset_removal=True).mapped(
             "account_move_line_id"
         )
-        amls.write({"asset_ids": False})
+        # amls.write({"asset_ids": False})
         return super().unlink()
 
     @api.model
