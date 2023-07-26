@@ -44,8 +44,10 @@ class AccountMove(models.Model):
     def unlink(self):
         # for move in self:
         deprs = self.env["account.asset.line"].search(
-            [("move_id", "in", self.ids), ("type", "in", ["depreciate", "remove"])]
+            [("move_id", "in", self.ids),
+             ("type", "in", ["depreciate", "remove"])]
         )
+
         if deprs and not self.env.context.get("unlink_from_asset"):
             raise UserError(
                 _(
@@ -63,8 +65,12 @@ class AccountMove(models.Model):
             deprs = (
                 self.env["account.asset.line"]
                 .sudo()
-                .search([("move_id", "in", self.ids), ("type", "=", "depreciate")])
+                .search([
+                    ("move_id", "in", self.ids),
+                    ("type", "=", "depreciate")
+                ])
             )
+
             if deprs:
                 raise UserError(
                     _(
@@ -88,38 +94,49 @@ class AccountMove(models.Model):
 
     def action_post(self):
         super().action_post()
+
         for move in self:
+
             for aml in move.line_ids.filtered(
                 lambda line: line.asset_profile_id and not line.tax_line_id
             ):
-                if aml.quantity > 1.0:
-                    for i in range(int(aml.quantity)):
+
+                if int(aml.quantity) > 1:
+                    for __ in range(int(aml.quantity)):
+
                         vals = move._prepare_asset_vals(
-                            aml, quantity=aml.quantity)
+                            aml, quantity=aml.quantity
+                        )
+
                         if not aml.name:
                             raise UserError(
-                                _("Asset name must be set in the label of the line.")
+                                _("Asset name must be set in\
+                                    the label of the line.")
                             )
 
                         asset_form = Form(
                             self.env["account.asset"]
                             .with_company(move.company_id)
                             .with_context(
-                                create_asset_from_move_line=True, move_id=move.id
+                                create_asset_from_move_line=True,
+                                move_id=move.id
                             )
                         )
+
                         for key, val in vals.items():
                             setattr(asset_form, key, val)
+
                         asset = asset_form.save()
                         asset.analytic_tag_ids = aml.analytic_tag_ids
                         aml.with_context(
                             allow_asset=True, allow_asset_removal=True
                         ).asset_ids = [(4, asset.id, 0)]
                 else:
-                    vals = move._prepare_asset_vals(aml)
+
                     if not aml.name:
                         raise UserError(
-                            _("Asset name must be set in the label of the line.")
+                            _("Asset name must be set in\
+                                the label of the line.")
                         )
 
                     asset_form = Form(
@@ -145,6 +162,16 @@ class AccountMove(models.Model):
                     "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
+                transfer_object = self.env['stock.picking']
+
+                transfer_object.create({
+                    'picking_type_id': 5,
+                    'location_id': 17,
+                    'location_dest_id': 0  # Virtual Location / Ativos
+                })
+
+
+
     def button_draft(self):
         invoices = self.filtered(lambda r: r.is_purchase_document())
         if invoices:
@@ -153,7 +180,9 @@ class AccountMove(models.Model):
 
     def _reverse_move_vals(self, default_values, cancel=True):
         move_vals = super()._reverse_move_vals(default_values, cancel)
+
         if move_vals["move_type"] not in ("out_invoice", "out_refund"):
+
             for line_command in move_vals.get("line_ids", []):
                 line_vals = line_command[2]  # (0, 0, {...})
                 assets = self.env["account.asset"].browse(
