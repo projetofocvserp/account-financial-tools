@@ -7,7 +7,7 @@
     "name": "Assets Management",
     "version": "14.0.2.8.1",
     "license": "AGPL-3",
-    "depends": ["account", "report_xlsx_helper"],
+    "depends": ["account", "report_xlsx_helper", "stock"],
     "excludes": ["account_asset"],
     "development_status": "Mature",
     "external_dependencies": {"python": ["python-dateutil"]},
@@ -29,5 +29,6 @@
         "data/cron.xml",
         "wizard/wiz_account_asset_report.xml",
         "wizard/wiz_asset_move_reverse.xml",
+        "views/stock_picking_view.xml",
     ],
 }

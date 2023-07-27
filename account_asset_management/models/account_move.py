@@ -162,15 +162,12 @@ class AccountMove(models.Model):
                     "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
-                transfer_object = self.env['stock.picking']
-
-                transfer_object.create({
-                    'picking_type_id': 5,
-                    'location_id': 17,
-                    'location_dest_id': 0  # Virtual Location / Ativos
-                })
-
-
+                # POP_UP / Transferência / Campos: location_id , location_dest_id/
+                # transfer_object.create({
+                #     'picking_type_id': 5,
+                #     'location_id': 17,
+                #     'location_dest_id': 0  # Virtual Location / Ativos
+                # })
 
     def button_draft(self):
         invoices = self.filtered(lambda r: r.is_purchase_document())
@@ -218,6 +215,31 @@ class AccountMove(models.Model):
         else:
             action_dict = {"type": "ir.actions.act_window_close"}
         return action_dict
+
+    def _get_filtered_move_lines(self, move_line_records):
+        return move_line_records.filtered(
+            lambda line: line.asset_profile_id and not line.tax_line_id
+        )
+
+    def action_create_transfer(self):
+        context = dict(self.env.context)
+        context.update({
+            'create_from_move': True,
+            'line_ids': self._get_filtered_move_lines(
+                self.invoice_line_ids
+            ).ids,
+        })
+        return {
+            "name": _("Create Transfer"),
+            "res_model": "stock.picking",
+            "type": "ir.actions.act_window",
+            "context": context,
+            "view_mode": "form",
+            "view_type": "form",
+            "view_id": self.env.ref('account_asset_management.stock_picking_inherit_view').id,
+            "target": "new",
+            "res_id": False,
+        }
 
 
 class AccountMoveLine(models.Model):

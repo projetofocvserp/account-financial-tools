@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+
+    <data noupdate="1">
+        <record id="stock_picking_inherit_view" model="ir.ui.view">
+            <field name="name">stock.picking.view.form.inherit</field>
+            <field name="model">stock.picking</field>
+            <field name="inherit_id" ref="stock.view_picking_form" />
+            <field name="arch" type="xml">
+                <xpath
+                    expr="//notebook//page[@name='operations']//field[@name='move_ids_without_package']"
+                    position="attributes">
+                    <attribute name="attrs">{'readonly': [(True, '=', context.get('create_from_move'))]}</attribute>
+                </xpath>
+            </field>
+        </record>
+    </data>
+
+
+</odoo>
