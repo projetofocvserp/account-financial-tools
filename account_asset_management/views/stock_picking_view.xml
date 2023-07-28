@@ -7,10 +7,14 @@
             <field name="model">stock.picking</field>
             <field name="inherit_id" ref="stock.view_picking_form" />
             <field name="arch" type="xml">
+                <xpath expr="//form" position="inside">
+                    <field name="create_from_move" invisible="1" />
+                </xpath>
+
                 <xpath
                     expr="//notebook//page[@name='operations']//field[@name='move_ids_without_package']"
                     position="attributes">
-                    <attribute name="attrs">{'readonly': [(True, '=', context.get('create_from_move'))]}</attribute>
+                    <attribute name="attrs">{'readonly': [('create_from_move', '=', True)]}</attribute>
                 </xpath>
             </field>
         </record>

@@ -7,7 +7,7 @@
     "name": "Assets Management",
     "version": "14.0.2.8.1",
     "license": "AGPL-3",
-    "depends": ["account", "report_xlsx_helper", "stock"],
+    "depends": ["stock", "account", "report_xlsx_helper"],
     "excludes": ["account_asset"],
     "development_status": "Mature",
     "external_dependencies": {"python": ["python-dateutil"]},
