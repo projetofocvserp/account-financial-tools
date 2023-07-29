@@ -8,6 +8,7 @@ import logging
 from odoo import _, api, fields, models
 from odoo.exceptions import UserError
 from odoo.tests.common import Form
+from typing import Dict, Any
 
 _logger = logging.getLogger(__name__)
 
@@ -31,6 +32,12 @@ class AccountMove(models.Model):
     _inherit = "account.move"
 
     asset_count = fields.Integer(compute="_compute_asset_count")
+
+    picking_id = fields.Many2one(
+        string="Stock Picking",
+        comodel_name="stock.picking",
+        store=True, readonly=True
+    )
 
     def _compute_asset_count(self):
         for rec in self:
@@ -92,50 +99,60 @@ class AccountMove(models.Model):
             "account_analytic_id": aml.analytic_account_id,
         }
 
+    def action_create_transfer(self) -> Dict[str, Any]:
+        picking = self.env['stock.picking'].with_context(
+            create_from_move=True,
+            line_ids=self._get_filtered_move_lines(
+                self.invoice_line_ids
+            ).ids,
+        )
+
+        return picking.action_open_stock_picking_form()
+
+    def action_edit_transfer(self) -> Dict[str, Any]:
+        picking = self.env['stock.picking'].with_context(
+            picking_id=self.picking_id.id
+        )
+
+        return picking.action_open_created_stock_picking()
+
     def action_post(self):
         super().action_post()
 
         for move in self:
-
-            for aml in move.line_ids.filtered(
+            lines_filtered = move.line_ids.filtered(
                 lambda line: line.asset_profile_id and not line.tax_line_id
-            ):
-                vals = move._prepare_asset_vals(
-                    aml, quantity=aml.quantity
-                )
+            )
 
-                if int(aml.quantity) > 1:
-                    for __ in range(int(aml.quantity)):
-
+            for aml in lines_filtered:
+                if aml.quantity > 1.0:
+                    for i in range(int(aml.quantity)):
+                        vals = move._prepare_asset_vals(
+                            aml, quantity=aml.quantity)
                         if not aml.name:
                             raise UserError(
-                                _("Asset name must be set in\
-                                    the label of the line.")
+                                _("Asset name must be set in the label of the line.")
                             )
 
                         asset_form = Form(
                             self.env["account.asset"]
                             .with_company(move.company_id)
                             .with_context(
-                                create_asset_from_move_line=True,
-                                move_id=move.id
+                                create_asset_from_move_line=True, move_id=move.id
                             )
                         )
-
                         for key, val in vals.items():
                             setattr(asset_form, key, val)
-
                         asset = asset_form.save()
                         asset.analytic_tag_ids = aml.analytic_tag_ids
                         aml.with_context(
                             allow_asset=True, allow_asset_removal=True
                         ).asset_ids = [(4, asset.id, 0)]
                 else:
-
+                    vals = move._prepare_asset_vals(aml)
                     if not aml.name:
                         raise UserError(
-                            _("Asset name must be set in\
-                                the label of the line.")
+                            _("Asset name must be set in the label of the line.")
                         )
 
                     asset_form = Form(
@@ -163,6 +180,7 @@ class AccountMove(models.Model):
 
     def button_draft(self):
         invoices = self.filtered(lambda r: r.is_purchase_document())
+
         if invoices:
             invoices.line_ids.asset_ids.unlink()
         super().button_draft()
@@ -212,16 +230,6 @@ class AccountMove(models.Model):
         return move_line_records.filtered(
             lambda line: line.asset_profile_id and not line.tax_line_id
         )
-
-    def action_create_transfer(self):
-        picking = self.env['stock.picking'].with_context(
-            create_from_move=True,
-            line_ids=self._get_filtered_move_lines(
-                self.invoice_line_ids
-            ).ids,
-        )
-
-        return picking.action_open_stock_picking_form()
 
 
 class AccountMoveLine(models.Model):

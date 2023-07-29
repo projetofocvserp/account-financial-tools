@@ -15,8 +15,8 @@
                         attrs="{'invisible': ['|', '|', '|', ('create_from_move', '=', False), ('location_id', '=', False), ('location_dest_id', '=', False), ('picking_type_id', '=', False)]}" />
                 </xpath>
 
-                <xpath expr="//form" position="inside">
-                    <field name="create_from_move" invisible="1" />
+                <xpath expr="//form//sheet" position="inside">
+                    <field name="create_from_move" invisible="1" nolabel="1"/>
                 </xpath>
 
                 <xpath
