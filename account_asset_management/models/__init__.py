@@ -7,4 +7,3 @@ from . import account_asset_line
 from . import account_asset_recompute_trigger
 from . import account_move
 from . import stock_picking
-from . import stock_move

@@ -29,15 +29,41 @@ FIELDS_AFFECTS_ASSET_MOVE_LINE = {
 
 
 class AccountMove(models.Model):
-    _inherit = "account.move"
+    _inherit: str = "account.move"
 
     asset_count = fields.Integer(compute="_compute_asset_count")
 
-    picking_id = fields.Many2one(
-        string="Stock Picking",
-        comodel_name="stock.picking",
-        store=True, readonly=True
-    )
+    # picking_id = fields.Many2one(
+    #     string="Stock Picking",
+    #     comodel_name="stock.picking",
+    #     store=True, readonly=True
+    # )
+
+    def _get_filtered_move_lines(self, move_line_records) -> Any:
+        return move_line_records.filtered(
+            lambda line: line.asset_profile_id and not line.tax_line_id
+        )
+
+    def _reverse_move_vals(self, default_values, cancel=True):
+        move_vals = super()._reverse_move_vals(default_values, cancel)
+
+        if move_vals["move_type"] not in ("out_invoice", "out_refund"):
+
+            for line_command in move_vals.get("line_ids", []):
+                line_vals = line_command[2]  # (0, 0, {...})
+                assets = self.env["account.asset"].browse(
+                    line_vals["asset_ids"])
+                # We remove the asset if we recognize that we are reversing
+                # the asset creation
+                if assets:
+                    asset_line = self.env["account.asset.line"].search(
+                        [("asset_id", "in", assets.ids), ("type", "=", "create")], limit=1
+                    )
+                    if asset_line and asset_line.move_id == self:
+                        assets.unlink()
+                        line_vals.update(
+                            asset_profile_id=False, asset_ids=False)
+        return move_vals
 
     def _compute_asset_count(self):
         for rec in self:
@@ -48,24 +74,46 @@ class AccountMove(models.Model):
             )
             rec.asset_count = len(assets)
 
-    def unlink(self):
-        # for move in self:
-        deprs = self.env["account.asset.line"].search(
-            [("move_id", "in", self.ids),
-             ("type", "in", ["depreciate", "remove"])]
+    def _prepare_asset_vals(self, aml, quantity=1.0) -> Dict[str, Any]:
+        depreciation_base = aml.balance
+        return {
+            "name": "{} ({})".format(aml.name, quantity),
+            "code": self.name,
+            "profile_id": aml.asset_profile_id,
+            "purchase_value": depreciation_base / quantity,
+            "partner_id": aml.partner_id,
+            "date_start": self.date,
+            "account_analytic_id": aml.analytic_account_id,
+        }
+
+    def _prepare_stock_picking_vals(self) -> Dict[str, Any]:
+        return {
+            'picking_type_id': 5,
+            'location_id': 17,
+            'location_dest_id': 19,
+            'move_type': 'direct',
+        }
+
+    def _create_stock_picking_for_move(self) -> None:
+        line_ids = self._get_filtered_move_lines(
+            self.invoice_line_ids
+        ).ids
+        stock_picking_object = self.env['stock.picking'].with_context(
+            created_from_move=True,
+            line_ids=line_ids,
         )
 
-        if deprs and not self.env.context.get("unlink_from_asset"):
-            raise UserError(
-                _(
-                    "You are not allowed to remove an accounting entry "
-                    "linked to an asset."
-                    "\nYou should remove such entries from the asset."
-                )
-            )
-        # trigger store function
-        deprs.write({"move_id": False})
-        return super().unlink()
+        stock_picking_vals = self._prepare_stock_picking_vals()
+
+        stock_picking_object.create(
+            stock_picking_vals
+        )
+
+    @api.model
+    def create(self, vals_list):
+        res = super().create(vals_list)
+
+        return res
 
     def write(self, vals):
         if set(vals).intersection(FIELDS_AFFECTS_ASSET_MOVE):
@@ -87,36 +135,26 @@ class AccountMove(models.Model):
                 )
         return super().write(vals)
 
-    def _prepare_asset_vals(self, aml, quantity=1.0):
-        depreciation_base = aml.balance
-        return {
-            "name": "{} ({})".format(aml.name, quantity),
-            "code": self.name,
-            "profile_id": aml.asset_profile_id,
-            "purchase_value": depreciation_base / quantity,
-            "partner_id": aml.partner_id,
-            "date_start": self.date,
-            "account_analytic_id": aml.analytic_account_id,
-        }
-
-    def action_create_transfer(self) -> Dict[str, Any]:
-        picking = self.env['stock.picking'].with_context(
-            create_from_move=True,
-            line_ids=self._get_filtered_move_lines(
-                self.invoice_line_ids
-            ).ids,
+    def unlink(self):
+        # for move in self:
+        deprs = self.env["account.asset.line"].search(
+            [("move_id", "in", self.ids),
+             ("type", "in", ["depreciate", "remove"])]
         )
 
-        return picking.action_open_stock_picking_form()
+        if deprs and not self.env.context.get("unlink_from_asset"):
+            raise UserError(
+                _(
+                    "You are not allowed to remove an accounting entry "
+                    "linked to an asset."
+                    "\nYou should remove such entries from the asset."
+                )
+            )
+        # trigger store function
+        deprs.write({"move_id": False})
+        return super().unlink()
 
-    def action_edit_transfer(self) -> Dict[str, Any]:
-        picking = self.env['stock.picking'].with_context(
-            picking_id=self.picking_id.id
-        )
-
-        return picking.action_open_created_stock_picking()
-
-    def action_post(self):
+    def action_post(self) -> None:
         super().action_post()
 
         for move in self:
@@ -178,33 +216,14 @@ class AccountMove(models.Model):
                     "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
+            self._create_stock_picking_for_move()
+
     def button_draft(self):
         invoices = self.filtered(lambda r: r.is_purchase_document())
 
         if invoices:
             invoices.line_ids.asset_ids.unlink()
         super().button_draft()
-
-    def _reverse_move_vals(self, default_values, cancel=True):
-        move_vals = super()._reverse_move_vals(default_values, cancel)
-
-        if move_vals["move_type"] not in ("out_invoice", "out_refund"):
-
-            for line_command in move_vals.get("line_ids", []):
-                line_vals = line_command[2]  # (0, 0, {...})
-                assets = self.env["account.asset"].browse(
-                    line_vals["asset_ids"])
-                # We remove the asset if we recognize that we are reversing
-                # the asset creation
-                if assets:
-                    asset_line = self.env["account.asset.line"].search(
-                        [("asset_id", "in", assets.ids), ("type", "=", "create")], limit=1
-                    )
-                    if asset_line and asset_line.move_id == self:
-                        assets.unlink()
-                        line_vals.update(
-                            asset_profile_id=False, asset_ids=False)
-        return move_vals
 
     def action_view_assets(self):
         assets = (
@@ -225,11 +244,6 @@ class AccountMove(models.Model):
         else:
             action_dict = {"type": "ir.actions.act_window_close"}
         return action_dict
-
-    def _get_filtered_move_lines(self, move_line_records):
-        return move_line_records.filtered(
-            lambda line: line.asset_profile_id and not line.tax_line_id
-        )
 
 
 class AccountMoveLine(models.Model):
