@@ -1,6 +1,5 @@
 from typing import Any, Dict, List, Tuple
 from odoo import _, models, api
-from traitlets import Bool
 
 
 class Picking(models.Model):
@@ -25,7 +24,7 @@ class Picking(models.Model):
         for move_line in move_lines_records:
             move_line.qty_done = move_line.product_uom_qty
 
-    def _get_line_records(self, ids: List[int]) -> Any:
+    def _get_move_line_records(self, ids: List[int]) -> Any:
         return self.env['account.move.line'].browse(ids)
 
     def _prepare_stock_move_vals(self, line_record) -> Dict[str, Any]:
@@ -45,7 +44,7 @@ class Picking(models.Model):
 
         stock_move_records: list = []
 
-        line_records = self._get_line_records(
+        line_records: Any = self._get_move_line_records(
             self.env.context.get('line_ids', [])
         )
 
@@ -62,13 +61,13 @@ class Picking(models.Model):
         return [(6, 0, stock_move_records)]
 
     @api.model
-    def create(self, vals_list):
-        stock_picking = super().create(vals_list)
+    def create(self, vals_list) -> Any:
+        stock_picking: Any = super().create(vals_list)
 
         if self.env.context.get('created_from_move'):
 
             stock_move_records: List[Tuple[Any]] = \
-                self._compute_stock_move_products()
+                stock_picking._compute_stock_move_products()
 
             stock_picking.move_ids_without_package = stock_move_records
 
@@ -80,8 +79,8 @@ class Picking(models.Model):
                 move_line_ids_without_package
 
             if stock_picking.state == 'assigned':
-                self._process_quantity_done(move_lines_records)
+                stock_picking._process_quantity_done(move_lines_records)
 
-                # stock_picking.button_validate()
+                stock_picking.button_validate()
 
         return stock_picking
