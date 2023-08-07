@@ -204,6 +204,9 @@ class AccountMove(models.Model):
         for move in self:
             lines_filtered: Any = self._get_filtered_move_lines(move.line_ids)
 
+            if not bool(lines_filtered):
+                break
+
             for move_line in lines_filtered:
 
                 if not move._quantity_is_valid(move_line.quantity):
