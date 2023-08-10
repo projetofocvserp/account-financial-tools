@@ -251,7 +251,7 @@
                             </field>
                         </page>
                         <page string="History">
-                            <field name="account_move_line_ids" readonly="1">
+                            <field name="account_move_line_id" readonly="1">
                                 <tree string="Journal Items">
                                     <field name="date" />
                                     <field name="move_id" />
