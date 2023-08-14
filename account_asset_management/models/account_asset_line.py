@@ -252,7 +252,7 @@ class AccountAssetLine(models.Model):
             "analytic_account_id": analytic_id,
             "analytic_tag_ids": [(4, tag.id) for tag in analytic_tags],
             "date": depreciation_date,
-            "asset_id": asset.id,
+            "asset_ids": [(4, asset.id, 0)],
         }
         return move_line_data
 

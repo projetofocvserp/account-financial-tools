@@ -33,12 +33,6 @@ class AccountMove(models.Model):
 
     asset_count = fields.Integer(compute="_compute_asset_count")
 
-    # picking_id = fields.Many2one(
-    #     string="Stock Picking",
-    #     comodel_name="stock.picking",
-    #     store=True, readonly=True
-    # )
-
     def _quantity_is_valid(self, quantity: float) -> bool:
         return (quantity % 2) in [0, 1]
 
@@ -55,6 +49,7 @@ class AccountMove(models.Model):
             for line_command in move_vals.get("line_ids", []):
 
                 line_vals: Any = line_command[2]  # (0, 0, {...})
+                line_vals['asset_ids'] = self.line_ids.asset_ids.ids
 
                 assets: Any = self.env["account.asset"].browse(
                     line_vals["asset_ids"]
@@ -211,15 +206,14 @@ class AccountMove(models.Model):
 
                 if not move._quantity_is_valid(move_line.quantity):
                     raise ValidationError(_(
-                        f"Product {move_line.name} has an invalid "
+                        "Product %s has an invalid "
                         "quantity value. \nPlease check the product "
                         "quantity and fix it."
-                    ))
+                    ) % move_line.name)
 
                 if not move_line.name:
                     raise UserError(
-                        _("Asset name must be set in the label \
-                                of the line.")
+                        _("Asset name must be set in the label of the line.")
                     )
 
                 for __ in range(int(move_line.quantity)):
@@ -232,14 +226,15 @@ class AccountMove(models.Model):
                     "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
-            move._create_stock_picking_for_move()
+            # move._create_stock_picking_for_move()
 
     def button_draft(self) -> None:
         invoices = self.filtered(lambda r: r.is_purchase_document())
 
         if invoices:
             invoices.line_ids.asset_ids.unlink()
-        super().button_draft()
+
+        return super().button_draft()
 
     def action_view_assets(self):
         assets = (

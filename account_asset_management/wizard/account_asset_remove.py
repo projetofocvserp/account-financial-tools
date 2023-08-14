@@ -97,7 +97,7 @@ class AccountAssetRemove(models.TransientModel):
         account_sale_id = False
         inv_lines = self.env["account.move.line"].search(
             [
-                ("asset_id", "=", asset_id),
+                ("asset_ids", "=", asset_id),
                 ("move_id.move_type", "in", ("out_invoice", "out_refund")),
             ]
         )
@@ -314,7 +314,7 @@ class AccountAssetRemove(models.TransientModel):
                 "debit": depr_amount > 0 and depr_amount or 0.0,
                 "credit": depr_amount < 0 and -depr_amount or 0.0,
                 "partner_id": partner_id,
-                "asset_id": asset.id,
+                "asset_ids": [(4, asset.id, 0)],
             }
             move_lines.append((0, 0, move_line_vals))
 
@@ -324,7 +324,7 @@ class AccountAssetRemove(models.TransientModel):
             "debit": (asset.depreciation_base < 0 and -asset.depreciation_base or 0.0),
             "credit": (asset.depreciation_base > 0 and asset.depreciation_base or 0.0),
             "partner_id": partner_id,
-            "asset_id": asset.id,
+            "asset_ids": [(4, asset.id, 0)],
         }
         move_lines.append((0, 0, move_line_vals))
 
@@ -338,7 +338,7 @@ class AccountAssetRemove(models.TransientModel):
                     "debit": residual_value,
                     "credit": 0.0,
                     "partner_id": partner_id,
-                    "asset_id": asset.id,
+                    "asset_ids": [(4, asset.id, 0)],
                 }
                 move_lines.append((0, 0, move_line_vals))
             elif self.posting_regime == "gain_loss_on_sale":
@@ -354,7 +354,7 @@ class AccountAssetRemove(models.TransientModel):
                         "debit": sale_value,
                         "credit": 0.0,
                         "partner_id": partner_id,
-                        "asset_id": asset.id,
+                        "asset_ids": [(4, asset.id, 0)],
                     }
                     move_lines.append((0, 0, move_line_vals))
                 balance = self.sale_value - residual_value
@@ -371,7 +371,7 @@ class AccountAssetRemove(models.TransientModel):
                     "debit": balance < 0 and -balance or 0.0,
                     "credit": balance > 0 and balance or 0.0,
                     "partner_id": partner_id,
-                    "asset_id": asset.id,
+                    "asset_ids": [(4, asset.id, 0)],
                 }
                 move_lines.append((0, 0, move_line_vals))
         return move_lines
