@@ -33,51 +33,45 @@ class AccountMove(models.Model):
 
     asset_count = fields.Integer(compute="_compute_asset_count")
 
-    # picking_id = fields.Many2one(
-    #     string="Stock Picking",
-    #     comodel_name="stock.picking",
-    #     store=True, readonly=True
-    # )
-
-    def _quantity_is_valid(self, quantity: float) -> bool:
+    @staticmethod
+    def _quantity_is_valid(quantity: float) -> bool:
         return (quantity % 2) in [0, 1]
 
-    def _get_filtered_move_lines(self, move_line_records) -> Any:
+    @staticmethod
+    def _get_filtered_move_lines(move_line_records) -> Any:
         return move_line_records.filtered(
             lambda line: line.asset_profile_id and not line.tax_line_id
         )
 
     def _reverse_move_vals(self, default_values, cancel=True) -> Any:
-        move_vals: Any = super()._reverse_move_vals(default_values, cancel)
-
+        move_vals = super()._reverse_move_vals(default_values, cancel)
         if move_vals["move_type"] not in ("out_invoice", "out_refund"):
 
             for line_command in move_vals.get("line_ids", []):
-
-                line_vals: Any = line_command[2]  # (0, 0, {...})
-
-                assets: Any = self.env["account.asset"].browse(
+                line_vals = line_command[2]  # (0, 0, {...})
+                assets = self.env["account.asset"].browse(
                     line_vals["asset_ids"]
                 )
+
                 # We remove the asset if we recognize that we are reversing
                 # the asset creation
 
                 if assets:
-                    asset_line: Any = self.env["account.asset.line"].search(
-                        [("asset_id", "in", assets.ids),
-                         ("type", "=", "create")], limit=1
-                    )
-
-                    if asset_line and asset_line.move_id == self:
-                        assets.unlink()
-                        line_vals.update(
-                            asset_profile_id=False, asset_ids=False)
+                    for asset in assets:
+                        asset_line: Any = self.env["account.asset.line"]\
+                            .search([
+                                    ("asset_id", "=", asset.id),
+                                    ("type", "=", "create")], limit=1
+                                )
+                        if asset_line and asset_line.move_id == self:
+                            asset.unlink()
+                    line_vals.update(asset_profile_id=False, asset_id=False)
         return move_vals
 
     def _compute_asset_count(self) -> None:
         for rec in self:
 
-            assets = (
+            assets: Any = (
                 self.env["account.asset.line"]
                 .search([("move_id", "=", rec.id)])
                 .mapped("asset_id")
@@ -88,6 +82,7 @@ class AccountMove(models.Model):
     def _prepare_asset_vals(
             self, move_line: Any, quantity: float = 1.0) -> Dict[str, Any]:
         depreciation_base = move_line.balance
+
         return {
             "name": "{} ({})".format(move_line.name, quantity),
             "code": self.name,
@@ -98,7 +93,8 @@ class AccountMove(models.Model):
             "account_analytic_id": move_line.analytic_account_id,
         }
 
-    def _prepare_stock_picking_vals(self) -> Dict[str, Any]:
+    @staticmethod
+    def _prepare_stock_picking_vals() -> Dict[str, Any]:
         return {
             'picking_type_id': 5,
             'location_id': 17,
@@ -211,15 +207,16 @@ class AccountMove(models.Model):
 
                 if not move._quantity_is_valid(move_line.quantity):
                     raise ValidationError(_(
-                        f"Product {move_line.name} has an invalid "
+                        "Product %s has an invalid "
                         "quantity value. \nPlease check the product "
                         "quantity and fix it."
-                    ))
+                    ) % move_line.name)
+                elif move_line.quantity == len(move_line.asset_ids):
+                    continue
 
                 if not move_line.name:
                     raise UserError(
-                        _("Asset name must be set in the label \
-                                of the line.")
+                        _("Asset name must be set in the label of the line.")
                     )
 
                 for __ in range(int(move_line.quantity)):
@@ -232,14 +229,15 @@ class AccountMove(models.Model):
                     "This invoice created the asset(s): %s") % ", ".join(refs)
                 move.message_post(body=message)
 
-            move._create_stock_picking_for_move()
+            # move._create_stock_picking_for_move()
 
     def button_draft(self) -> None:
         invoices = self.filtered(lambda r: r.is_purchase_document())
 
         if invoices:
             invoices.line_ids.asset_ids.unlink()
-        super().button_draft()
+
+        return super().button_draft()
 
     def action_view_assets(self):
         assets = (
