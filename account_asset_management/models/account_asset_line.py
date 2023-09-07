@@ -259,7 +259,7 @@ class AccountAssetLine(models.Model):
     def create_move(self):
         created_move_ids = []
         asset_ids = set()
-        ctx = dict(self.env.context, allow_asset=True, check_move_validity=False)
+        ctx = dict(self.env.context, allow_asset=True, check_move_validity=False, from_asset_line=True)
         for line in self:
             asset = line.asset_id
             depreciation_date = line.line_date

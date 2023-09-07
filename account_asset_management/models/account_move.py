@@ -195,8 +195,11 @@ class AccountMove(models.Model):
         return super().unlink()
 
     def action_post(self) -> None:
-        super().action_post()
-
+        res = super().action_post()
+        
+        if self.env.context.get("from_asset_line"):
+            return res
+        
         for move in self:
             lines_filtered: Any = self._get_filtered_move_lines(move.line_ids)
 
